@@ -44,6 +44,25 @@ class BugPage extends Page
                     $action->halt();
                 }),
 
+            // The documented case, which must keep working as it does today: this
+            // action has a modal of its own, so closing the child returns the user to
+            // it rather than losing the flow.
+            Action::make('openChildFromAModal')
+                ->label('3. The same, from an action that has a modal')
+                ->color('gray')
+                ->requiresConfirmation()
+                ->registerModalActions([
+                    Action::make('child')
+                        ->label('Child')
+                        ->modalHeading('Close me: you should land back on the confirmation')
+                        ->action(fn () => null),
+                ])
+                ->action(function (Action $action): void {
+                    $action->getLivewire()->mountAction('child');
+
+                    $action->halt();
+                }),
+
             Action::make('other')
                 ->label('2. Any other action')
                 ->color('primary')

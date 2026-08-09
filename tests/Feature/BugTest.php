@@ -9,9 +9,9 @@ use Livewire\Livewire;
 use Tests\TestCase;
 
 /**
- * This test asserts the expected behaviour, so it fails on Filament v4.12.6. The
- * failure is the bug report: after the child modal is closed, no action on the page
- * can be used again.
+ * On Filament v4.12.6 this fails at the second assertion: closing the child's modal
+ * leaves `openChild` mounted with nothing to show, and every action on the page is
+ * dead from then on.
  */
 class BugTest extends TestCase
 {
@@ -44,20 +44,32 @@ class BugTest extends TestCase
 
         // 2. The user closes the child modal. This is the exact call the modal makes on
         // close, with the value that `getParentActionsToCancelOnClose()` resolves to.
+        //
+        // `openChild` has no schema and no confirmation, so it has no modal to stay
+        // open in. Nothing about it is on screen, so it must not stay mounted either.
         $child = $component->instance()->getMountedAction();
         $component->call('unmountAction', $child->getParentActionsToCancelOnClose());
 
-        // `openChild` is still mounted. It has no schema and no confirmation, so it has
-        // no modal of its own: there is now nothing on screen, and no way for the user
-        // to reach or dismiss it.
-        $this->assertSame(['openChild'], $this->mountedActionNames($component));
+        $this->assertSame([], $this->mountedActionNames($component));
 
-        // 3. Every other action on the page is now dead. `resolveActions()` tries to
-        // resolve them as children of the stuck action, throws
-        // `ActionNotResolvableException`, `cacheMountedActions()` swallows it, and
-        // `mountAction()` quietly gives up. Nothing reaches the user or the log.
-        $component->call('mountAction', 'other');
+        // 3. Every other action on the page still works.
+        $component->call('mountAction', 'other')
+            ->assertNotified('The other action ran.');
+    }
 
-        $component->assertNotified('The other action ran.');
+    public function test_an_action_with_a_modal_still_stays_mounted(): void
+    {
+        // The documented behaviour, which the fix must not change: closing a child's
+        // modal returns the user to the parent's modal, rather than losing the flow.
+        $component = Livewire::test(BugPage::class)
+            ->call('mountAction', 'openChildFromAModal')
+            ->call('callMountedAction');
+
+        $this->assertSame(['openChildFromAModal', 'child'], $this->mountedActionNames($component));
+
+        $child = $component->instance()->getMountedAction();
+        $component->call('unmountAction', $child->getParentActionsToCancelOnClose());
+
+        $this->assertSame(['openChildFromAModal'], $this->mountedActionNames($component));
     }
 }
